@@ -20,7 +20,8 @@ use std::{thread, time};
 
 use pool::config::{Config, NodeConfig, PoolConfig, WorkerConfig};
 use pool::logger::LOGGER;
-use pool::proto::{JobTemplate, RpcError, SubmitParams};
+//use pool::proto::{JobTemplate, RpcError, SubmitParams};
+use pool::proto::{JobTemplate, RpcError, SubmitParams,SubmitParams_py};
 use pool::server::Server;
 use pool::worker::Worker;
 
@@ -136,7 +137,17 @@ impl Pool {
                     continue;
                 }
             }
-
+            match self.server.connect_py() {
+                Ok(_) => {}
+                Err(e) => {
+                    error!(
+                        LOGGER,
+                        "{} - Unable to connect to upstream server: {}", self.id, e
+                    );
+                    thread::sleep(time::Duration::from_secs(1));
+                    continue;
+                }
+            }
             // check the server for messages and handle them
             let _ = self.process_server_messages();
 
@@ -268,6 +279,15 @@ impl Pool {
                         // We dont know the difficulty so we cant check that here
                         // Send it to the upstream server for further verification and logging
                         self.server.submit_share(&share.clone(), worker.id());
+                        let contacts = SubmitParams_py{
+                            height: share.height,
+                            nonce: share.nonce,
+                            //worker: worker.login(),
+                            worker: worker.id(),
+                            difficulty: worker.status.difficulty,
+                            type1: "poolshare".to_string(),
+                        };
+                        self.server.submit_share_py(contacts, worker.id());
                         warn!(LOGGER, "{} - Got share at height {} with nonce {} with difficulty {} from worker {}",
                                 self.id,
                                 share.height,

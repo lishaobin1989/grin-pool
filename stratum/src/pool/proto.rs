@@ -69,7 +69,14 @@ pub struct SubmitParams {
     edge_bits: u32,
     pub pow: Vec<u32>,
 }
-
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SubmitParams_py {
+    pub height: u64,
+    pub worker: String,
+    pub nonce: u64,
+    pub difficulty: u64,
+    pub type1: String,
+}
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JobTemplate {
     pub height: u64,

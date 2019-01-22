@@ -322,18 +322,20 @@ def share_handler(ch, method, properties, body):
     print("{}".format(body.decode("utf-8") ))
     sys.stdout.flush()
     content = json.loads(body.decode("utf-8"))
-    LOGGER.warn("Processing new {} message".format(content["type"]))
+    content["log_timestamp"] = str(time.time())
+    LOGGER.warn("Processing new {} message".format(content["type1"]))
+    # LOGGER.warn("Processing new {} message".format(content["type"]))
     # LOGGER.warn("PUT message: {}".format(content))
     LOGGER.warn("Current Share -  Height: {} - Nonce: {}".format(content["height"], content["nonce"]))
 
     # Dont process very old shares
     if (HEIGHT - int(content["height"])) > SHARE_EXPIRETIME:
         ch.basic_ack(delivery_tag = method.delivery_tag)
-        LOGGER.warn("Dropping expired share - Type: {}, Height: {}, Nonce: {}".format(content["type"], content["height"], content["nonce"]))
+        LOGGER.warn("Dropping expired share - Type: {}, Height: {}, Nonce: {}".format(content["type1"], content["height"], content["nonce"]))
         return
 
     # create a Share instance
-    if content["type"] == "poolshare":
+    if content["type1"] == "poolshare":
         s_timestamp = dateutil.parser.parse(str(datetime.utcnow().year) + " " + content["log_timestamp"])
         s_height = int(content["height"])
         s_nonce = content["nonce"]
@@ -346,9 +348,9 @@ def share_handler(ch, method, properties, body):
                 timestamp = s_timestamp, 
                 found_by = s_worker,
             )
-        SHARES.add(new_share, content["type"], ch, method.delivery_tag)
+        SHARES.add(new_share, content["type1"], ch, method.delivery_tag)
         POOLSHARE_HEIGHT = s_height
-    elif content["type"] == "grinshare":
+    elif content["type1"] == "grinshare":
         s_timestamp = dateutil.parser.parse(content["log_timestamp"])
         try:
             s_hash = content["hash"]
@@ -394,7 +396,7 @@ def share_handler(ch, method, properties, body):
                 is_valid=s_valid, 
                 invalid_reason=s_error
             )
-        SHARES.add(new_share, content["type"], ch, method.delivery_tag)
+        SHARES.add(new_share, content["type1"], ch, method.delivery_tag)
         GRINSHARE_HEIGHT = s_height
     else:
         LOGGER.warn("Invalid message id: {}".format(content["id"]))

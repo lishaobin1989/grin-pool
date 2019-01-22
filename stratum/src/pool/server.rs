@@ -25,7 +25,8 @@ use std::{thread, time};
 
 use pool::config::{Config, NodeConfig, PoolConfig, WorkerConfig};
 use pool::logger::LOGGER;
-use pool::proto::{JobTemplate, LoginParams, RpcError, StratumProtocol, SubmitParams, WorkerStatus};
+//use pool::proto::{JobTemplate, LoginParams, RpcError, StratumProtocol, SubmitParams, WorkerStatus};
+use pool::proto::{JobTemplate, LoginParams, RpcError, StratumProtocol, SubmitParams, SubmitParams_py,WorkerStatus};
 use pool::proto::{RpcRequest, RpcResponse};
 use pool::worker::Worker;
 
@@ -36,6 +37,7 @@ pub struct Server {
     id: String,
     config: Config,
     stream: Option<BufStream<TcpStream>>,
+    stream_py: Option<BufStream<TcpStream>>,
     protocol: StratumProtocol,
     error: bool,
     pub job: JobTemplate,
@@ -49,6 +51,7 @@ impl Server {
             id: "Pool".to_string(),
             config: cfg,
             stream: None,
+            stream_py: None,
             protocol: StratumProtocol::new(),
             error: false,
             job: JobTemplate::new(),
@@ -101,7 +104,35 @@ impl Server {
         };
         return Ok(());
     }
+    pub fn connect_py(&mut self) -> Result<(), String> {
+        // Only connect if we are not already connected
+        if !self.error && self.stream_py.is_some() {
+            return Ok(());
+        }
+        //let grin_stratum_url = self.config.grin_node.address.clone() + ":"
+        //    + &self.config.grin_node.stratum_port.to_string();
+        let grin_stratum_url = "127.0.0.1:32080";
+        warn!(
+            LOGGER,
+            "{} - Connecting to upstream stratum server at {}",
+            self.id,
+            grin_stratum_url.to_string()
+        );
+        match TcpStream::connect(grin_stratum_url.to_string()) {
+            Ok(conn) => {
+                let _ = conn.set_nonblocking(true)
+                    .expect("set_nonblocking call failed");
+                self.stream_py = Some(BufStream::new(conn));
+                self.error = false;
+            }
+            Err(e) => {
+                self.error = true;
+                return Err(e.to_string());
+            }
+        };
 
+        return Ok(());
+    }
     /// Request status from the upstream Grin Stratum server - this is *pool* status (not individual
     /// worker status)
     pub fn request_status(&mut self, stream: &mut BufStream<TcpStream>) -> Result<(), String> {
@@ -177,7 +208,24 @@ impl Server {
             None => Err("No upstream connection".to_string()),
         }
     }
-
+    pub fn submit_share_py(
+        &mut self,
+        solution: SubmitParams_py,
+        //solution: HashMap<Vec<u32>, usize>,
+        worker_id: usize,
+    ) -> Result<(), String> {
+        match self.stream_py {
+            Some(ref mut stream_py) => {
+                let params_value = serde_json::to_value(solution).unwrap();
+                debug!(LOGGER, "{} - Submitting a share", self.id);
+                return self.protocol.write_message(
+                    serde_json::to_string(&params_value).unwrap(),
+                    stream_py,
+                );
+            }
+            None => Err("No upstream connection".to_string()),
+        }
+    }
     /// Send Keepalive
     pub fn send_keepalive(&mut self) -> Result<(), String> {
         match self.stream {
