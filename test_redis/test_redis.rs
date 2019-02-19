@@ -7,3 +7,6 @@ fn do_something() -> redis::RedisResult<()> {
 
     Ok(())
 }
+
+
+

@@ -29,6 +29,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate toml;
 extern crate reqwest;
+extern crate redis;
 
 use bufstream::BufStream;
 use std::error::Error;
