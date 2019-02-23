@@ -9,7 +9,7 @@ var bignum = require('bignum');
 var mysql = require("mysql");
 
 var pool = mysql.createPool({
-    host: '127.0.0.1',
+    host: '172.17.0.1',
     user: 'root',
     password: 'guesswhat',
     database: 'pool',
@@ -81,9 +81,13 @@ var listenLogs = function (filePath) {
         } else {
         }
     });
+
     function generateTxt(str, year) {
         var regExp = /.*Got share at height\s*\d*\s*with nonce\s*\d*\s*with difficulty\s*\d*\s*from worker\s*.*\n/g;
         var temp = str.match(regExp);
+        // todo lastshare
+        var lastshare = [];
+        var workerL = [];
         for (var s in temp) {
             console.log(s, temp[s]);
             var reg_time = /\w{3}\s+\d{2}\s+\d{2}:\d{2}:\d{2}/;
@@ -106,6 +110,14 @@ var listenLogs = function (filePath) {
             var tem = worker_.split('.');
             var miner = tem[0];
             var worker = tem[1];
+            // todo lastshare
+            var index = workerL.indexOf(worker_);
+            if(index == -1){
+                lastshare.push([miner,worker,share_t]);
+                workerL.push(worker_);
+            }else{
+                lastshare[index][2] = share_t;
+            }
             console.log(s, share_t, height, nonce, difficulty, miner, worker);
             if (shares[height + ""]) {
                 if (shares[height + ""][worker_]) {
@@ -136,6 +148,7 @@ var listenLogs = function (filePath) {
             }
             height_new = parseInt(height);
         }
+        updateLastshare(lastshare);
         if (height_new > height_old) {
             writedb();
         }
@@ -287,6 +300,43 @@ function writedb() {
 
 
 }
+function updateLastshare(lastshare) {
+    var update = [];
+    var insert = [];
+    async.mapLimit(lastshare, 10, function (last, callback1) {
+        query('update last_shares_test set timestamp = ? where miner = ? and worker = ?', [last[2],last[0],last[1]]
+            , function (err, rows, fields) {
+                if (err) {
+                    callback1(err);
+                } else {
+                    if(rows.changedRows==0){
+                        console.log(last,rows.changedRows);
+                        query('insert into last_shares_test (miner,worker,timestamp) values (?,?,?)', [last[0],last[1],last[2]]
+                            ,function (err, rows, fields) {
+                                if (err) {
+                                    callback1(err);
+                                }else{
+                                    console.log(last,rows.changedRows);
+                                    insert.push(last);
+                                    callback1(null, "success");
+                                }
+                            })
+                    }else{
+                        update.push(last);
+                        callback1(null, "success");
+                    }
+                }
+            });
+    }, function (err, result) {
+        if (err) {
+            console.log(err);
+        } else {
+            console.log("update  last_share success, length:", lastshare.length);
+            console.log("update  :", update);
+            console.log("insert  :", insert);
+        }
+    });
+}
 function getNewLog(path) {
     console.log('做一些解析操作');
 }
@@ -340,6 +390,16 @@ console.log(filename + ' 被监听中...');
  PRIMARY KEY (`id`)
  )CHARSET=utf8;
 
+
+
+ create table last_shares_test (
+ `id` bigint(20) NOT NULL AUTO_INCREMENT,
+ `miner` varchar(1024) DEFAULT NULL,
+ `worker` varchar(1024) DEFAULT NULL,
+ `timestamp` datetime DEFAULT NULL,
+ PRIMARY KEY (`id`)
+ )CHARSET=utf8;
+
  redisClient.hdel(coin + ':earn:roundCurrent', addresse, function (error, result) {
 
 
@@ -349,6 +409,8 @@ console.log(filename + ' 被监听中...');
 //height difficulty
 
 h2.diff = h2.total_difficulty - h1.total_difficulty
+
+
 
 
 
